@@ -1,0 +1,160 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+#define MAX_SAMPLES 200
+#define UNDERVOLTAGE_LIMIT 3.30
+#define OVERCURRENT_LIMIT 2.00
+
+typedef struct {
+    float time;
+    float voltage;
+    float current;
+    float power;
+} Sample;
+
+int readSamples(const char *filename, Sample samples[]);
+void computePower(Sample samples[], int n);
+void printSamples(Sample samples[], int n);
+void printStatistics(Sample samples[], int n);
+void sortByVoltage(Sample samples[], int n);
+
+int main() {
+    Sample samples[MAX_SAMPLES];
+    int n;
+
+    n = readSamples("battery_data.txt", samples);
+
+    if (n <= 0) {
+        printf("No valid data found.\n");
+        return 1;
+    }
+
+    computePower(samples, n);
+
+    printf("BATTERY LOG ANALYZER\n");
+    printf("--------------------\n");
+    printf("Number of samples: %d\n\n", n);
+
+    printStatistics(samples, n);
+
+    printf("\nSamples before sorting:\n");
+    printSamples(samples, n);
+
+    sortByVoltage(samples, n);
+
+    printf("\nSamples sorted by voltage (ascending):\n");
+    printSamples(samples, n);
+
+    return 0;
+}
+
+int readSamples(const char *filename, Sample samples[]) {
+    FILE *fp;
+    int count = 0;
+
+    fp = fopen(filename, "r");
+    if (fp == NULL) {
+        printf("Error: cannot open file %s\n", filename);
+        return -1;
+    }
+
+    while (count < MAX_SAMPLES &&
+           fscanf(fp, "%f %f %f",
+                  &samples[count].time,
+                  &samples[count].voltage,
+                  &samples[count].current) == 3) {
+        count++;
+    }
+
+    fclose(fp);
+    return count;
+}
+
+void computePower(Sample samples[], int n) {
+    int i;
+    for (i = 0; i < n; i++) {
+        samples[i].power = samples[i].voltage * samples[i].current;
+    }
+}
+
+void printSamples(Sample samples[], int n) {
+    int i;
+    printf("Time\tVoltage\tCurrent\tPower\n");
+    for (i = 0; i < n; i++) {
+        printf("%.1f\t%.2f\t%.2f\t%.2f\n",
+               samples[i].time,
+               samples[i].voltage,
+               samples[i].current,
+               samples[i].power);
+    }
+}
+
+void printStatistics(Sample samples[], int n) {
+    int i;
+    float minV, maxV, sumV = 0.0f;
+    float minI, maxI, sumI = 0.0f;
+    float minP, maxP, sumP = 0.0f;
+    int undervoltageCount = 0;
+    int overcurrentCount = 0;
+
+    minV = maxV = samples[0].voltage;
+    minI = maxI = samples[0].current;
+    minP = maxP = samples[0].power;
+
+    for (i = 0; i < n; i++) {
+        if (samples[i].voltage < minV) minV = samples[i].voltage;
+        if (samples[i].voltage > maxV) maxV = samples[i].voltage;
+
+        if (samples[i].current < minI) minI = samples[i].current;
+        if (samples[i].current > maxI) maxI = samples[i].current;
+
+        if (samples[i].power < minP) minP = samples[i].power;
+        if (samples[i].power > maxP) maxP = samples[i].power;
+
+        sumV += samples[i].voltage;
+        sumI += samples[i].current;
+        sumP += samples[i].power;
+
+        if (samples[i].voltage < UNDERVOLTAGE_LIMIT) {
+            undervoltageCount++;
+        }
+
+        if (samples[i].current > OVERCURRENT_LIMIT) {
+            overcurrentCount++;
+        }
+    }
+
+    printf("Voltage:\n");
+    printf("  Min = %.2f V\n", minV);
+    printf("  Max = %.2f V\n", maxV);
+    printf("  Avg = %.2f V\n\n", sumV / n);
+
+    printf("Current:\n");
+    printf("  Min = %.2f A\n", minI);
+    printf("  Max = %.2f A\n", maxI);
+    printf("  Avg = %.2f A\n\n", sumI / n);
+
+    printf("Power:\n");
+    printf("  Min = %.2f W\n", minP);
+    printf("  Max = %.2f W\n", maxP);
+    printf("  Avg = %.2f W\n\n", sumP / n);
+
+    printf("Warnings:\n");
+    printf("  Undervoltage samples (< %.2f V): %d\n", UNDERVOLTAGE_LIMIT, undervoltageCount);
+    printf("  Overcurrent samples (> %.2f A): %d\n", OVERCURRENT_LIMIT, overcurrentCount);
+}
+
+void sortByVoltage(Sample samples[], int n) {
+    int i, j;
+    Sample temp;
+
+    for (i = 0; i < n - 1; i++) {
+        for (j = 0; j < n - 1 - i; j++) {
+            if (samples[j].voltage > samples[j + 1].voltage) {
+                temp = samples[j];
+                samples[j] = samples[j + 1];
+                samples[j + 1] = temp;
+            }
+        }
+    }
+}
